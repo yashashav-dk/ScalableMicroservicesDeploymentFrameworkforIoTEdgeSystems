@@ -1,0 +1,84 @@
+graph TB
+    subgraph "IoT Edge Devices"
+        D1[Temperature Sensor]
+        D2[Humidity Sensor]
+        D3[Pressure Sensor]
+        D4[Motion Sensor]
+    end
+
+    subgraph "API Gateway Layer"
+        GW[Edge Gateway<br/>Port 8005<br/>Rate Limiting & Routing]
+    end
+
+    subgraph "Microservices Layer"
+        SI[Sensor Ingestion<br/>Port 8001<br/>Data Validation]
+        DP[Data Processor<br/>Port 8002<br/>Aggregation Engine]
+        DR[Device Registry<br/>Port 8003<br/>Device Management]
+        AM[Alert Manager<br/>Port 8004<br/>Threshold Monitoring]
+    end
+
+    subgraph "CI/CD Pipeline"
+        direction LR
+        SCM[Source Control<br/>Git] --> LINT[Lint<br/>flake8]
+        LINT --> TEST[Unit Tests<br/>pytest]
+        TEST --> BUILD[Build Images<br/>Docker]
+        BUILD --> ITEST[Integration Test<br/>docker-compose]
+        ITEST --> PUSH[Push to ECR<br/>Registry]
+        PUSH --> DEPLOY[Deploy to EKS<br/>kubectl]
+    end
+
+    subgraph "Kubernetes Cluster - AWS EKS"
+        subgraph "Namespace: iot-edge"
+            direction TB
+            POD_SI[sensor-ingestion<br/>2-10 replicas]
+            POD_DP[data-processor<br/>2-10 replicas]
+            POD_DR[device-registry<br/>2-10 replicas]
+            POD_AM[alert-manager<br/>2-10 replicas]
+            POD_GW[edge-gateway<br/>2-10 replicas]
+        end
+        HPA[Horizontal Pod Autoscaler<br/>70% CPU target]
+    end
+
+    subgraph "Docker Containerization"
+        IMG_SI[sensor-ingestion:latest]
+        IMG_DP[data-processor:latest]
+        IMG_DR[device-registry:latest]
+        IMG_AM[alert-manager:latest]
+        IMG_GW[edge-gateway:latest]
+    end
+
+    %% Data Flow
+    D1 & D2 & D3 & D4 --> GW
+    GW --> SI
+    GW --> DR
+    SI --> DP
+    DP --> AM
+    DR -.->|Device Lookup| SI
+    DR -.->|Device Lookup| DP
+    AM -.->|Alert Notifications| GW
+
+    %% CI/CD to Kubernetes
+    DEPLOY --> POD_SI & POD_DP & POD_DR & POD_AM & POD_GW
+    HPA --> POD_SI & POD_DP & POD_DR & POD_AM & POD_GW
+
+    %% Docker images to pods
+    IMG_SI --> POD_SI
+    IMG_DP --> POD_DP
+    IMG_DR --> POD_DR
+    IMG_AM --> POD_AM
+    IMG_GW --> POD_GW
+
+    %% Styling
+    classDef device fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    classDef gateway fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef service fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef cicd fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef k8s fill:#fce4ec,stroke:#c62828,stroke-width:2px
+    classDef docker fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+
+    class D1,D2,D3,D4 device
+    class GW gateway
+    class SI,DP,DR,AM service
+    class SCM,LINT,TEST,BUILD,ITEST,PUSH,DEPLOY cicd
+    class POD_SI,POD_DP,POD_DR,POD_AM,POD_GW,HPA k8s
+    class IMG_SI,IMG_DP,IMG_DR,IMG_AM,IMG_GW docker
