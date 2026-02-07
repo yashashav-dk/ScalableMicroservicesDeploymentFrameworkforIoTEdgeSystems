@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-manager
+  namespace: iot-edge
+  labels:
+    app: alert-manager
+spec:
+  type: ClusterIP
+  selector:
+    app: alert-manager
+  ports:
+    - name: http
+      port: 8004
+      targetPort: 8004
+      protocol: TCP

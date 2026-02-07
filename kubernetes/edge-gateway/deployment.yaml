@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-gateway
+  namespace: iot-edge
+  labels:
+    app: edge-gateway
+    tier: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: edge-gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: edge-gateway
+        tier: gateway
+    spec:
+      containers:
+        - name: edge-gateway
+          image: edge-gateway:latest
+          ports:
+            - containerPort: 8005
+              protocol: TCP
+          env:
+            - name: SENSOR_INGESTION_URL
+              value: "http://sensor-ingestion.iot-edge.svc.cluster.local:8001"
+            - name: DATA_PROCESSOR_URL
+              value: "http://data-processor.iot-edge.svc.cluster.local:8002"
+            - name: DEVICE_REGISTRY_URL
+              value: "http://device-registry.iot-edge.svc.cluster.local:8003"
+            - name: ALERT_MANAGER_URL
+              value: "http://alert-manager.iot-edge.svc.cluster.local:8004"
+            - name: RATE_LIMIT
+              value: "100"
+            - name: RATE_WINDOW
+              value: "60"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3

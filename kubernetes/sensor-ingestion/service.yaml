@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sensor-ingestion
+  namespace: iot-edge
+  labels:
+    app: sensor-ingestion
+spec:
+  type: ClusterIP
+  selector:
+    app: sensor-ingestion
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+      protocol: TCP
