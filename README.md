@@ -1,3 +1,16 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="IoT Edge Microservices - Scalable Deployment Framework" width="800"/>
+</p>
+
+<p align="center">
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick_Start-Docker_Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Quick Start"/></a>
+  <a href="#microservices"><img src="https://img.shields.io/badge/Services-5_FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="Services"/></a>
+  <a href="#kubernetes-deployment"><img src="https://img.shields.io/badge/Deploy-Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white" alt="Kubernetes"/></a>
+  <a href="#cicd-pipeline"><img src="https://img.shields.io/badge/CI%2FCD-Jenkins_%7C_GitLab-D24939?style=for-the-badge&logo=jenkins&logoColor=white" alt="CI/CD"/></a>
+</p>
+
+---
+
 # Scalable Microservices Deployment Framework for IoT Edge Systems
 
 A production-grade microservices platform demonstrating CI/CD automation, containerization, and Kubernetes orchestration for IoT edge computing workloads. This project implements five interconnected FastAPI microservices with complete deployment infrastructure spanning Docker, Kubernetes (EKS), and dual CI/CD pipelines (Jenkins + GitLab CI).
