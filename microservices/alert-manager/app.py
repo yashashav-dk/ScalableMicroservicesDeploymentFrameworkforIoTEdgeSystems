@@ -2,12 +2,11 @@
 
 import time
 import uuid
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-
-app = FastAPI(title="Alert Manager Service", version="1.0.0")
 
 # In-memory storage
 alert_rules: list[dict] = []
@@ -19,6 +18,15 @@ DEFAULT_RULES = [
     {"id": "default-temp-low", "sensor_type": "temperature", "condition": "lt", "threshold": -10.0, "severity": "warning"},
     {"id": "default-humidity-high", "sensor_type": "humidity", "condition": "gt", "threshold": 90.0, "severity": "warning"},
 ]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    alert_rules.extend(DEFAULT_RULES)
+    yield
+
+
+app = FastAPI(title="Alert Manager Service", version="1.0.0", lifespan=lifespan)
 
 
 class AlertRule(BaseModel):
@@ -33,11 +41,6 @@ class EvaluateRequest(BaseModel):
     sensor_type: str = Field(..., min_length=1)
     value: float
     timestamp: Optional[float] = None
-
-
-@app.on_event("startup")
-async def load_default_rules():
-    alert_rules.extend(DEFAULT_RULES)
 
 
 @app.get("/health")
