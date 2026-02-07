@@ -1,0 +1,110 @@
+version: "3.9"
+
+services:
+  sensor-ingestion:
+    build:
+      context: ./microservices/sensor-ingestion
+      dockerfile: Dockerfile
+    container_name: sensor-ingestion
+    ports:
+      - "8001:8001"
+    environment:
+      - DATA_PROCESSOR_URL=http://data-processor:8002
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - iot-network
+    restart: unless-stopped
+
+  data-processor:
+    build:
+      context: ./microservices/data-processor
+      dockerfile: Dockerfile
+    container_name: data-processor
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - iot-network
+    restart: unless-stopped
+
+  device-registry:
+    build:
+      context: ./microservices/device-registry
+      dockerfile: Dockerfile
+    container_name: device-registry
+    ports:
+      - "8003:8003"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - iot-network
+    restart: unless-stopped
+
+  alert-manager:
+    build:
+      context: ./microservices/alert-manager
+      dockerfile: Dockerfile
+    container_name: alert-manager
+    ports:
+      - "8004:8004"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - iot-network
+    restart: unless-stopped
+
+  edge-gateway:
+    build:
+      context: ./microservices/edge-gateway
+      dockerfile: Dockerfile
+    container_name: edge-gateway
+    ports:
+      - "8005:8005"
+    environment:
+      - SENSOR_INGESTION_URL=http://sensor-ingestion:8001
+      - DATA_PROCESSOR_URL=http://data-processor:8002
+      - DEVICE_REGISTRY_URL=http://device-registry:8003
+      - ALERT_MANAGER_URL=http://alert-manager:8004
+      - RATE_LIMIT=100
+      - RATE_WINDOW=60
+    depends_on:
+      sensor-ingestion:
+        condition: service_healthy
+      data-processor:
+        condition: service_healthy
+      device-registry:
+        condition: service_healthy
+      alert-manager:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - iot-network
+    restart: unless-stopped
+
+networks:
+  iot-network:
+    driver: bridge
+    name: iot-edge-network
