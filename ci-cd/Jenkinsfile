@@ -1,0 +1,176 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_REGISTRY = credentials('ecr-registry-url')
+        AWS_REGION      = 'us-east-1'
+        EKS_CLUSTER     = 'iot-edge-cluster'
+        NAMESPACE        = 'iot-edge'
+        GIT_SHA          = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+    }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                echo "Building commit: ${GIT_SHA}"
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                sh '''
+                    pip install flake8
+                    for service in sensor-ingestion data-processor device-registry alert-manager edge-gateway; do
+                        echo "Linting ${service}..."
+                        flake8 microservices/${service}/app.py --max-line-length=120 --ignore=E501,W503
+                    done
+                '''
+            }
+        }
+
+        stage('Unit Test') {
+            parallel {
+                stage('Test sensor-ingestion') {
+                    steps {
+                        dir('microservices/sensor-ingestion') {
+                            sh '''
+                                pip install -r requirements.txt
+                                python -m pytest tests/ -v --tb=short --junitxml=../../test-results/sensor-ingestion.xml
+                            '''
+                        }
+                    }
+                }
+                stage('Test data-processor') {
+                    steps {
+                        dir('microservices/data-processor') {
+                            sh '''
+                                pip install -r requirements.txt
+                                python -m pytest tests/ -v --tb=short --junitxml=../../test-results/data-processor.xml
+                            '''
+                        }
+                    }
+                }
+                stage('Test device-registry') {
+                    steps {
+                        dir('microservices/device-registry') {
+                            sh '''
+                                pip install -r requirements.txt
+                                python -m pytest tests/ -v --tb=short --junitxml=../../test-results/device-registry.xml
+                            '''
+                        }
+                    }
+                }
+                stage('Test alert-manager') {
+                    steps {
+                        dir('microservices/alert-manager') {
+                            sh '''
+                                pip install -r requirements.txt
+                                python -m pytest tests/ -v --tb=short --junitxml=../../test-results/alert-manager.xml
+                            '''
+                        }
+                    }
+                }
+                stage('Test edge-gateway') {
+                    steps {
+                        dir('microservices/edge-gateway') {
+                            sh '''
+                                pip install -r requirements.txt
+                                python -m pytest tests/ -v --tb=short --junitxml=../../test-results/edge-gateway.xml
+                            '''
+                        }
+                    }
+                }
+            }
+            post {
+                always {
+                    junit 'test-results/*.xml'
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    def services = ['sensor-ingestion', 'data-processor', 'device-registry', 'alert-manager', 'edge-gateway']
+                    for (svc in services) {
+                        sh """
+                            docker build -t ${DOCKER_REGISTRY}/${svc}:${GIT_SHA} \
+                                         -t ${DOCKER_REGISTRY}/${svc}:latest \
+                                         microservices/${svc}/
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Integration Test') {
+            steps {
+                sh '''
+                    chmod +x ci-cd/scripts/integration_test.sh
+                    ./ci-cd/scripts/integration_test.sh
+                '''
+            }
+            post {
+                failure {
+                    echo 'Integration tests FAILED — blocking release.'
+                    sh 'docker-compose down --remove-orphans || true'
+                }
+                always {
+                    sh 'docker-compose down --remove-orphans || true'
+                }
+            }
+        }
+
+        stage('Push to Registry') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}"
+                    def services = ['sensor-ingestion', 'data-processor', 'device-registry', 'alert-manager', 'edge-gateway']
+                    for (svc in services) {
+                        sh """
+                            docker push ${DOCKER_REGISTRY}/${svc}:${GIT_SHA}
+                            docker push ${DOCKER_REGISTRY}/${svc}:latest
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to EKS') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh """
+                    aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER}
+                    chmod +x ci-cd/scripts/deploy.sh
+                    ./ci-cd/scripts/deploy.sh ${GIT_SHA}
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline completed successfully for commit ${GIT_SHA}"
+        }
+        failure {
+            echo "Pipeline FAILED for commit ${GIT_SHA}"
+            // Notification placeholder: Slack, email, etc.
+            // slackSend channel: '#iot-deployments', message: "Build FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
